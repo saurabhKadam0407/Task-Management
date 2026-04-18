@@ -1,0 +1,5 @@
+package com.TaskManagement.Cloud;
+
+public interface StorageService {
+
+}

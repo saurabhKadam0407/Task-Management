@@ -1,0 +1,13 @@
+package com.TaskManagement.Entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+@Entity
+@Table(name = "file_atttachments")
+@Date
+@NoArgsConstructor
+
+public class FileAttachment {
+
+}
