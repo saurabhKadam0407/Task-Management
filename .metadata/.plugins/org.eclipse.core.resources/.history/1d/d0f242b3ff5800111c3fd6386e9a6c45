@@ -1,0 +1,158 @@
+package com.TaskManagement.Service;
+
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.TaskManagement.Entity.Board;
+import com.TaskManagement.Entity.BoardCard;
+import com.TaskManagement.Entity.BoardColumn;
+import com.TaskManagement.Entity.Issue;
+import com.TaskManagement.Repository.BoardCardRepository;
+import com.TaskManagement.Repository.BoardColumnRepository;
+import com.TaskManagement.Repository.BoardRepository;
+import com.TaskManagement.Repository.IssueRepository;
+
+
+
+
+
+@Service
+public class BoardService {
+	
+	@Autowired
+	private BoardRepository boardRepo;
+	
+	@Autowired
+	private BoardColumnRepository boardCoumnRepo;
+	
+	@Autowired
+	private BoardCardRepository boardCardRepo;
+	
+	@Autowired
+	private IssueRepository issueRepo;
+	
+	
+	public Board createBoard(Board board) {
+		return boardRepo.save(board);
+	}
+	
+	
+	public Optional<Board>findByBoardId(Long id){
+		return boardRepo.findById(id);
+	}
+	
+	public List<BoardColumn>getBoardColumn(Long boardId){
+		return boardCoumnRepo.findByBoardIdOrderByPosition(boardId);
+	}
+	
+	public List<BoardCard>getCardsForColumn(Long boardId,Long columnId){
+		return boardCardRepo.findByBoardIdAndCoumnIdOrderByPosition(boardId, columnId);
+	}
+
+	@Transactional
+	public BoardCard addIssueToBoard(Long boardId,Long columnId,Long IssueId) {
+		
+		Issue issue = issueRepo.findById(IssueId).orElseThrow(()-> new RuntimeException("issue not found"));
+		
+		boardCardRepo.findByIssueId(IssueId).ifPresent(boardCardRepo::delete);
+		
+		BoardColumn column= boardCoumnRepo.findById(columnId).orElseThrow(()-> new RuntimeException("coulmn not found"));
+		
+		if(column.getWipLimit() !=null && column.getWipLimit()>0) {
+			
+			long count =boardCardRepo.countByBoardIdAndColumnId(boardId, columnId);
+			if(count>= column.getWipLimit()) {
+				throw new RuntimeException(" Wip Limit reached for this column:"+column.getName());
+			}
+		}
+		
+		List<BoardCard>existing= boardCardRepo.findByBoardIdAndCoumnIdOrderByPosition(boardId, columnId);
+		int pos= existing.size();
+		
+		
+		BoardCard card= new BoardCard();
+		
+		card.setBoardId(boardId);
+		card.setColumn(column);
+		card.setIssueId(IssueId);
+		card.setPosition(pos);
+		boardCardRepo.save(card);
+		
+		
+//		if(column.getStatusKey()!=null) {
+//			issue.setIssueStatus(Enum.valueOf(com.TaskManagementTool2.Enum.IssueStatus.class, column.getStatusKey()));
+//			issueRepo.save(issue);
+//		}
+		
+		return card;
+		
+		
+	}
+	
+	
+	
+	@Transactional
+	public void moveCards(Long boardId,Long cardId,Long columnId, int position,String performedBy) {
+		
+		BoardCard card= boardCardRepo.findById(cardId).orElseThrow(()-> new RuntimeException("card not found"));
+		
+		BoardColumn fromStatus= card.getColumn();
+		BoardColumn toStatus= boardCoumnRepo.findById(columnId).orElseThrow(()-> new RuntimeException("status not found"));
+		
+		
+		if(toStatus.getWipLimit()!=null && toStatus.getWipLimit()>0) {
+			long count=boardCardRepo.countByBoardIdAndColumnId(boardId, columnId);
+			
+			if(!Objects.equals(fromStatus.getId(), toStatus.getId()) && count >= toStatus.getWipLimit() ) {
+				 throw new RuntimeException("wip limit exceededfor column:"+toStatus.getWipLimit());
+			}
+		}
+		
+		List<BoardCard>fromList= boardCardRepo.findByBoardIdAndCoumnIdOrderByPosition(boardId, fromStatus.getId());
+		
+		for(BoardCard c:fromList) {
+			if(c.getPosition() > card.getPosition()) {
+				c.setPosition(c.getPosition()-1);
+				boardCardRepo.save(c);
+			}
+		}
+		
+		List<BoardCard>toList= boardCardRepo.findByBoardIdAndCoumnIdOrderByPosition(boardId, toStatus.getId());
+		
+		for(BoardCard c:toList) {
+			if(c.getPosition()>=position) {
+			 c.setPosition(c.getPosition()+1);
+			 boardCardRepo.save(c);
+			}
+		}
+		
+		
+		card.setColumn(toStatus);
+		card.setPosition(position);
+		boardCardRepo.save(card);
+	}
+	
+	
+	@Transactional
+	public void recordCoumn(Long boardId,Long columnId,List<Long>orderedCardId) {
+		int pos=0;
+		for(Long cid:orderedCardId) {
+			BoardCard card= boardCardRepo.findById(cid).orElseThrow(()-> new RuntimeException("card not found"));
+			card.setPosition(pos++);
+			boardCardRepo.save(card);
+		}
+	}
+	
+	@Transactional
+	public void satartSprint(Long sprintId) {}
+	
+	
+	@Transactional
+	public void closeSprint(Long sprintId) {}
+}
+
